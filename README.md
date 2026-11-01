@@ -37,6 +37,10 @@ This is an early community release extracted from a larger single-file applicati
 
 Embedded geographic reference datasets and protected map resources are excluded from the public distribution. The Indus reference-data editor and tide/astronomy module are disabled because their datasets have not been cleared for public distribution. No operational survey data is bundled.
 
+## Separate sonar equipment trial v4
+
+[Windows EXE, single-file Python source, setup guides and validation reports](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/releases/tag/sonar-equipment-trial-v4). Independent engineering evaluation, including the Actisense NGX/NGT binary USB navigation/depth driver. Simulated tests passed; no physical gateway or sonar has been tested. The proposed SL3-over-TCP receiver requires a cooperating test bridge. Native StructureScan Ethernet, live SL3 generation and live 3D decoding are not implemented or verified. This is separate from the hydrographic package below.
+
 ## Get started
 
 ### Latest single-file download: 24 OCT 2026 (source refresh 25 October)
