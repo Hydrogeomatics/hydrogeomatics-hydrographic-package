@@ -1,6 +1,8 @@
 """Native Qt serial testing panel, embedded in the single-file survey app."""
 import datetime
 import json
+import configparser
+import io
 from pathlib import Path
 import queue
 import threading
@@ -445,6 +447,14 @@ class SerialComTest(W.QWidget):
             button.clicked.connect(callback)
             presets.addWidget(button)
         layout.addLayout(presets)
+        scripts = W.QHBoxLayout()
+        self.load_script_button = W.QPushButton('Load test script...')
+        self.load_script_button.clicked.connect(self.load_test_script)
+        self.save_script_button = W.QPushButton('Save used as script...')
+        self.save_script_button.clicked.connect(self.save_test_script)
+        scripts.addWidget(self.load_script_button)
+        scripts.addWidget(self.save_script_button)
+        layout.addLayout(scripts)
         run = W.QHBoxLayout()
         run.addWidget(W.QLabel('Delay (ms)'))
         self.command_delay = W.QSpinBox()
@@ -458,7 +468,7 @@ class SerialComTest(W.QWidget):
         stop.clicked.connect(self.stop_commands)
         run.addWidget(stop)
         layout.addLayout(run)
-        hint = W.QLabel('Each numbered button sends its row. Load/save command sets as JSON; text files load one command per line. No commands run automatically.')
+        hint = W.QLabel('Numbered buttons send individual rows. Save used as script saves only checked Use rows, including HEX/Enter options. Load test script fills the list without sending. Scripts: .script/.json, .ini or one-command-per-line .txt.')
         hint.setWordWrap(True)
         layout.addWidget(hint)
         splitter.addWidget(box)
@@ -561,6 +571,98 @@ class SerialComTest(W.QWidget):
                 Path(name).write_text(json.dumps(self.command_set(), indent=2), encoding='utf-8')
                 self.status.setText(f'Saved command set: {Path(name).name}')
             except OSError as exc: self.status.setText(f'Save failed: {exc}')
+
+    def used_command_script(self):
+        data = self.command_set()
+        data['commands'] = [row for row in data['commands'] if row['selected']]
+        if not data['commands']:
+            raise ValueError('Check at least one row under Use before saving a test script.')
+        if any(not row['text'].strip() for row in data['commands']):
+            raise ValueError('A checked Use row is empty. Enter its command or uncheck it.')
+        return data
+
+    def read_test_script(self, path):
+        path = Path(path)
+        if path.stat().st_size > 2 * 1024 * 1024:
+            raise ValueError('Test script must be smaller than 2 MB.')
+        raw = path.read_bytes()
+        text = raw.decode('utf-16') if raw.startswith((b'\xff\xfe', b'\xfe\xff')) else raw.decode('utf-8-sig')
+        if text.lstrip().startswith('{'):
+            data = json.loads(text)
+        elif path.suffix.lower() == '.ini':
+            parser = configparser.ConfigParser(interpolation=None, delimiters=('=',))
+            parser.read_string(text)
+            rows = []
+            sections = sorted((s for s in parser.sections() if s.isdigit()), key=int)
+            if not sections: raise ValueError('INI script must contain numbered command sections.')
+            for section in sections:
+                row = parser[section]
+                command = row.get('CMD', '')
+                selected = row.getboolean('Cho', fallback=True)
+                if not command and not selected: continue
+                rows.append({'text': command, 'selected': selected,
+                             'hex': row.getboolean('HEX', fallback=False),
+                             'enter': row.getboolean('Enter', fallback=True)})
+            delay = parser.getint('SET', 'DelayTime', fallback=1000)
+            if parser.getint('SET', 'RunTimes', fallback=1) != 1:
+                raise ValueError('This script requests repeated runs. Set RunTimes=1; the command list runs once.')
+            for section in sections:
+                value = parser[section].get('Delay', '').strip()
+                if value and int(value) not in (0, delay):
+                    raise ValueError('Different per-command INI delays are not supported. Use one SET DelayTime value.')
+            data = {'version': 1, 'delay_ms': delay, 'commands': rows}
+        else:
+            data = {'version': 1, 'commands': [
+                {'text': line, 'selected': True, 'hex': False, 'enter': True}
+                for line in text.splitlines() if line.strip()]}
+        if not isinstance(data, dict) or not data.get('commands'):
+            raise ValueError('The script has no commands.')
+        self.apply_command_set(data)
+        return len(data['commands'])
+
+    def write_test_script(self, path):
+        data = self.used_command_script()
+        path = Path(path)
+        if path.suffix.lower() == '.ini':
+            parser = configparser.ConfigParser(interpolation=None)
+            parser.optionxform = str
+            parser['SET'] = {'RunTimes': '1', 'DelayTime': str(data['delay_ms'])}
+            for index, row in enumerate(data['commands'], 1):
+                parser[str(index)] = {'Cho': '1', 'CMD': row['text'],
+                    'HEX': str(int(row['hex'])), 'Enter': str(int(row['enter'])),
+                    'Delay': str(data['delay_ms'])}
+            buffer = io.StringIO()
+            parser.write(buffer)
+            text = buffer.getvalue()
+        else:
+            text = json.dumps(data, indent=2)
+        path.write_text(text, encoding='utf-8')
+        return len(data['commands'])
+
+    def load_test_script(self):
+        name, _ = W.QFileDialog.getOpenFileName(self, 'Load test command script', '',
+            'Test command scripts (*.script *.json *.ini *.txt);;All files (*)')
+        if name:
+            try:
+                count = self.read_test_script(name)
+                self.status.setText(f'Loaded {count} commands from {Path(name).name}. Nothing sent; review Use, HEX and Enter before running.')
+            except Exception as exc: self.status.setText(f'Script load failed: {exc}')
+
+    def save_test_script(self):
+        try:
+            self.used_command_script()
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        name, selected_filter = W.QFileDialog.getSaveFileName(self, 'Save checked Use commands as a new test script',
+            'serial-test.script', 'Test command script (*.script);;JSON script (*.json);;QCOM-style INI script (*.ini)')
+        if name:
+            try:
+                if not Path(name).suffix:
+                    name += '.ini' if '*.ini' in selected_filter else '.json' if '*.json' in selected_filter else '.script'
+                count = self.write_test_script(name)
+                self.status.setText(f'Saved {count} checked Use commands to {Path(name).name}; unchecked rows excluded.')
+            except Exception as exc: self.status.setText(f'Script save failed: {exc}')
 
     def select_file(self):
         name, _ = W.QFileDialog.getOpenFileName(self, 'Select file to send', '', 'All files (*)')

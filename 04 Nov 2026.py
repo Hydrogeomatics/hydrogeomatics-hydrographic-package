@@ -24865,6 +24865,8 @@ SERIAL_COM_TEST_SOURCE = (
     '"""Native Qt serial testing panel, embedded in the single-file survey app."""\n'
     'import datetime\n'
     'import json\n'
+    'import configparser\n'
+    'import io\n'
     'from pathlib import Path\n'
     'import queue\n'
     'import threading\n'
@@ -25309,6 +25311,14 @@ SERIAL_COM_TEST_SOURCE = (
     '            button.clicked.connect(callback)\n'
     '            presets.addWidget(button)\n'
     '        layout.addLayout(presets)\n'
+    '        scripts = W.QHBoxLayout()\n'
+    "        self.load_script_button = W.QPushButton('Load test script...')\n"
+    '        self.load_script_button.clicked.connect(self.load_test_script)\n'
+    "        self.save_script_button = W.QPushButton('Save used as script...')\n"
+    '        self.save_script_button.clicked.connect(self.save_test_script)\n'
+    '        scripts.addWidget(self.load_script_button)\n'
+    '        scripts.addWidget(self.save_script_button)\n'
+    '        layout.addLayout(scripts)\n'
     '        run = W.QHBoxLayout()\n'
     "        run.addWidget(W.QLabel('Delay (ms)'))\n"
     '        self.command_delay = W.QSpinBox()\n'
@@ -25322,7 +25332,7 @@ SERIAL_COM_TEST_SOURCE = (
     '        stop.clicked.connect(self.stop_commands)\n'
     '        run.addWidget(stop)\n'
     '        layout.addLayout(run)\n'
-    "        hint = W.QLabel('Each numbered button sends its row. Load/save command sets as JSON; text files load one command per line. No commands run automatically.')\n"
+    "        hint = W.QLabel('Numbered buttons send individual rows. Save used as script saves only checked Use rows, including HEX/Enter options. Load test script fills the list without sending. Scripts: .script/.json, .ini or one-command-per-line .txt.')\n"
     '        hint.setWordWrap(True)\n'
     '        layout.addWidget(hint)\n'
     '        splitter.addWidget(box)\n'
@@ -25425,6 +25435,98 @@ SERIAL_COM_TEST_SOURCE = (
     "                Path(name).write_text(json.dumps(self.command_set(), indent=2), encoding='utf-8')\n"
     "                self.status.setText(f'Saved command set: {Path(name).name}')\n"
     "            except OSError as exc: self.status.setText(f'Save failed: {exc}')\n"
+    '\n'
+    '    def used_command_script(self):\n'
+    '        data = self.command_set()\n'
+    "        data['commands'] = [row for row in data['commands'] if row['selected']]\n"
+    "        if not data['commands']:\n"
+    "            raise ValueError('Check at least one row under Use before saving a test script.')\n"
+    "        if any(not row['text'].strip() for row in data['commands']):\n"
+    "            raise ValueError('A checked Use row is empty. Enter its command or uncheck it.')\n"
+    '        return data\n'
+    '\n'
+    '    def read_test_script(self, path):\n'
+    '        path = Path(path)\n'
+    '        if path.stat().st_size > 2 * 1024 * 1024:\n'
+    "            raise ValueError('Test script must be smaller than 2 MB.')\n"
+    '        raw = path.read_bytes()\n'
+    "        text = raw.decode('utf-16') if raw.startswith((b'\\xff\\xfe', b'\\xfe\\xff')) else raw.decode('utf-8-sig')\n"
+    "        if text.lstrip().startswith('{'):\n"
+    '            data = json.loads(text)\n'
+    "        elif path.suffix.lower() == '.ini':\n"
+    "            parser = configparser.ConfigParser(interpolation=None, delimiters=('=',))\n"
+    '            parser.read_string(text)\n'
+    '            rows = []\n'
+    '            sections = sorted((s for s in parser.sections() if s.isdigit()), key=int)\n'
+    "            if not sections: raise ValueError('INI script must contain numbered command sections.')\n"
+    '            for section in sections:\n'
+    '                row = parser[section]\n'
+    "                command = row.get('CMD', '')\n"
+    "                selected = row.getboolean('Cho', fallback=True)\n"
+    '                if not command and not selected: continue\n'
+    "                rows.append({'text': command, 'selected': selected,\n"
+    "                             'hex': row.getboolean('HEX', fallback=False),\n"
+    "                             'enter': row.getboolean('Enter', fallback=True)})\n"
+    "            delay = parser.getint('SET', 'DelayTime', fallback=1000)\n"
+    "            if parser.getint('SET', 'RunTimes', fallback=1) != 1:\n"
+    "                raise ValueError('This script requests repeated runs. Set RunTimes=1; the command list runs once.')\n"
+    '            for section in sections:\n'
+    "                value = parser[section].get('Delay', '').strip()\n"
+    '                if value and int(value) not in (0, delay):\n'
+    "                    raise ValueError('Different per-command INI delays are not supported. Use one SET DelayTime value.')\n"
+    "            data = {'version': 1, 'delay_ms': delay, 'commands': rows}\n"
+    '        else:\n'
+    "            data = {'version': 1, 'commands': [\n"
+    "                {'text': line, 'selected': True, 'hex': False, 'enter': True}\n"
+    '                for line in text.splitlines() if line.strip()]}\n'
+    "        if not isinstance(data, dict) or not data.get('commands'):\n"
+    "            raise ValueError('The script has no commands.')\n"
+    '        self.apply_command_set(data)\n'
+    "        return len(data['commands'])\n"
+    '\n'
+    '    def write_test_script(self, path):\n'
+    '        data = self.used_command_script()\n'
+    '        path = Path(path)\n'
+    "        if path.suffix.lower() == '.ini':\n"
+    '            parser = configparser.ConfigParser(interpolation=None)\n'
+    '            parser.optionxform = str\n'
+    "            parser['SET'] = {'RunTimes': '1', 'DelayTime': str(data['delay_ms'])}\n"
+    "            for index, row in enumerate(data['commands'], 1):\n"
+    "                parser[str(index)] = {'Cho': '1', 'CMD': row['text'],\n"
+    "                    'HEX': str(int(row['hex'])), 'Enter': str(int(row['enter'])),\n"
+    "                    'Delay': str(data['delay_ms'])}\n"
+    '            buffer = io.StringIO()\n'
+    '            parser.write(buffer)\n'
+    '            text = buffer.getvalue()\n'
+    '        else:\n'
+    '            text = json.dumps(data, indent=2)\n'
+    "        path.write_text(text, encoding='utf-8')\n"
+    "        return len(data['commands'])\n"
+    '\n'
+    '    def load_test_script(self):\n'
+    "        name, _ = W.QFileDialog.getOpenFileName(self, 'Load test command script', '',\n"
+    "            'Test command scripts (*.script *.json *.ini *.txt);;All files (*)')\n"
+    '        if name:\n'
+    '            try:\n'
+    '                count = self.read_test_script(name)\n'
+    "                self.status.setText(f'Loaded {count} commands from {Path(name).name}. Nothing sent; review Use, HEX and Enter before running.')\n"
+    "            except Exception as exc: self.status.setText(f'Script load failed: {exc}')\n"
+    '\n'
+    '    def save_test_script(self):\n'
+    '        try:\n'
+    '            self.used_command_script()\n'
+    '        except ValueError as exc:\n'
+    '            self.status.setText(str(exc))\n'
+    '            return\n'
+    "        name, selected_filter = W.QFileDialog.getSaveFileName(self, 'Save checked Use commands as a new test script',\n"
+    "            'serial-test.script', 'Test command script (*.script);;JSON script (*.json);;QCOM-style INI script (*.ini)')\n"
+    '        if name:\n'
+    '            try:\n'
+    '                if not Path(name).suffix:\n'
+    "                    name += '.ini' if '*.ini' in selected_filter else '.json' if '*.json' in selected_filter else '.script'\n"
+    '                count = self.write_test_script(name)\n'
+    "                self.status.setText(f'Saved {count} checked Use commands to {Path(name).name}; unchecked rows excluded.')\n"
+    "            except Exception as exc: self.status.setText(f'Script save failed: {exc}')\n"
     '\n'
     '    def select_file(self):\n'
     "        name, _ = W.QFileDialog.getOpenFileName(self, 'Select file to send', '', 'All files (*)')\n"
