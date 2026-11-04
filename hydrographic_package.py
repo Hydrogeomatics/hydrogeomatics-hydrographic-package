@@ -22,7 +22,7 @@ def _check_source_bundle():
     required = (
         'qt_widget_source.py', 'survey_source.py', 'map_source.py',
         'engine_source.py', 'indus_ktd_source.py', 'chart_plot_source.py',
-        'enc_editor_source.py', 'dredge_volume_source.py', 'hydro_tide_payload.py',
+        'enc_editor_source.py', 'dredge_volume_source.py', 'hydro_tide_payload.py', 'serial_com_test.py',
     )
     folder = Path(__file__).resolve().parent / 'modules'
     missing = [name for name in required if not (folder / name).is_file()]
@@ -73,11 +73,14 @@ CHART_PLOT_SOURCE = (Path(__file__).resolve().parent / "modules/chart_plot_sourc
 
 ENC_EDITOR_SOURCE = (Path(__file__).resolve().parent / "modules/enc_editor_source.py").read_text(encoding="utf-8")
 
+SERIAL_COM_TEST_SOURCE = (Path(__file__).resolve().parent / "modules/serial_com_test.py").read_text(encoding="utf-8")
+
 def load_components():
     try:
         widgets=_module('HYDROGEOMATICS20_widgets',QT_WIDGET_SOURCE)
         qt=widgets.make_modules()
         core=_module('HYDROGEOMATICS20_survey',SURVEY_SOURCE,qt)
+        core._serial_com_test_factory=_module('HYDROGEOMATICS_serial_com_test', SERIAL_COM_TEST_SOURCE).SerialComTest
         modern=_module('HYDROGEOMATICS20_map',MAP_SOURCE)
         engine=_module('HYDROGEOMATICS20_engine',ENGINE_SOURCE)
         acq=engine.install(core,modern)
