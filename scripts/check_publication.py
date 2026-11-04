@@ -7,9 +7,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SINGLE_FILE = '24OCT2026.py'
-ARCHIVED_SINGLE_FILES = {'Hydrogeomatics version 22 OCT 2026.py': 'ff8a4fcd71ae5c7af79133b57e02bd4722e175859f61dcf0cb668c1ff3923221'}
+SINGLE_FILE = '04NOV2026.py'
+ARCHIVED_SINGLE_FILES = {'24OCT2026.py': 'c394492fac9449845183a938c2d998c0beb7e465d4405884d67d08dcedae5a68', 'Hydrogeomatics version 22 OCT 2026.py': 'ff8a4fcd71ae5c7af79133b57e02bd4722e175859f61dcf0cb668c1ff3923221'}
 SOURCE_MODULES = {
+    'SERIAL_COM_TEST_SOURCE': 'modules/serial_com_test.py',
     'QT_WIDGET_SOURCE': 'modules/qt_widget_source.py',
     'SURVEY_SOURCE': 'modules/survey_source.py',
     'MAP_SOURCE': 'modules/map_source.py',
@@ -33,7 +34,7 @@ ALLOWED = {
 } | set(ARCHIVED_SINGLE_FILES) | {f'modules/{name}.py' for name in (
     'qt_widget_source', 'survey_source', 'map_source', 'engine_source',
     'indus_ktd_source', 'chart_plot_source', 'enc_editor_source',
-    'dredge_volume_source', 'hydro_tide_payload',
+    'dredge_volume_source', 'hydro_tide_payload', 'serial_com_test',
 )}
 PATTERNS = [
     r'gh[pousr]_[A-Za-z0-9]{30,}',
@@ -71,13 +72,13 @@ def single_file_source(files):
     if found != set(SOURCE_MODULES):
         raise ValueError('Launcher source module assignments changed; review the builder.')
     doc = ast.parse(source).body[0]
-    documentation = '''HYDROGEOMATICS - version 24 OCT 2026, public single-file edition.
+    documentation = '''HYDROGEOMATICS - version 04 NOV 2026, public single-file edition.
 
 Contains the reviewed public application code; no separate modules folder is needed.
-Source metadata refreshed 25 October 2026. The complete Desktop edition uses existing uploaded-constituent descriptions; this public edition retains its reference-data exclusions.
+Updated 4 November 2026: native Serial COM Test in Hardware & Survey Settings. Public reference-data exclusions are retained.
 Python 3.10+ and the packages in requirements.txt are still required.
 Install: python -m pip install PyQt6 pyqtgraph numpy pyserial pyproj ezdxf matplotlib utide sonarlight pandas
-Run: python "24OCT2026.py"
+Run: python "04NOV2026.py"
 Project code: MIT License. Dependencies retain their own licenses.
 Embedded private/reference datasets are excluded. Indus reference-data and tide/astronomy features remain disabled in this public edition.
 Contribute: https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package

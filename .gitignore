@@ -31,4 +31,5 @@
 !/.github/ISSUE_TEMPLATE/feature_request.yml
 
 !/24OCT2026.py
+!/04NOV2026.py
 !/tests/test_input_filter.py

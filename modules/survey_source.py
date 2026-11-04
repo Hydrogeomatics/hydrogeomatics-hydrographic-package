@@ -7050,6 +7050,10 @@ def run_gui() -> int:
         refresh_geodetic_detail()
 
         def apply_dialog_settings() -> None:
+            tester = getattr(win, '_serial_com_test', None)
+            if tester is not None and tester.connected:
+                messagebox.showwarning(APP_TITLE, "Close the Serial COM Test port before applying hardware settings.")
+                return False
             if _acquisition.writer is not None:
                 messagebox.showwarning(APP_TITLE, "Stop recording before applying settings.", parent=win)
                 return False
@@ -7177,6 +7181,14 @@ def run_gui() -> int:
             scroll.setWidgetResizable(True)
             scroll.setWidget(page)
             notebook.q.insertTab(index, scroll, title)
+        # Embedded native Qt serial testing panel; no external Python file or Tk window.
+        factory = globals().get('_serial_com_test_factory')
+        if factory is not None:
+            can_test = lambda: _acquisition.writer is None and not any(t.is_alive() for t in io_monitor_threads)
+            tester = factory(win.q, settings=settings.gps, can_open=can_test)
+            win._serial_com_test = tester
+            serial_index = notebook.q.addTab(tester, "Serial COM Test")
+            ttk.Button(controls, text="Serial COM Test", command=lambda: notebook.q.setCurrentIndex(serial_index)).pack(side="left", padx=(6, 0))
         return win
 
     def show_data_display() -> None:
