@@ -1,5 +1,6 @@
 """Native Qt serial testing panel, embedded in the single-file survey app."""
 import datetime
+import json
 from pathlib import Path
 import queue
 import threading
@@ -14,10 +15,12 @@ def encode_message(text, hex_mode=False, ending='CRLF'):
 
 
 def io_loop(port, outgoing, events, stop):
+    stream = None
+    transfer = None
     try:
         while not stop.is_set():
             try:
-                action, value = outgoing.get_nowait()
+                action, value = outgoing.get_nowait() if stream is None else (None, None)
             except queue.Empty:
                 action = None
             if action == 'send':
@@ -29,12 +32,32 @@ def io_loop(port, outgoing, events, stop):
                 port.dtr = value
             elif action == 'rts':
                 port.rts = value
+            elif action == 'file':
+                name, cancel = value
+                stream = open(name, 'rb')
+                transfer = {'sent': 0, 'total': Path(name).stat().st_size, 'cancel': cancel}
+            if stream is not None:
+                cancelled = transfer['cancel'].is_set()
+                chunk = b'' if cancelled else stream.read(min(1024, max(1, port.baudrate // 100)))
+                if chunk:
+                    written = port.write(chunk)
+                    if written != len(chunk):
+                        raise OSError(f'Partial file write: {written}/{len(chunk)} bytes')
+                    transfer['sent'] += written
+                    events.put(('tx_file', written))
+                    events.put(('file_progress', (transfer['sent'], transfer['total'])))
+                else:
+                    stream.close()
+                    stream = None
+                    events.put(('file_done', (transfer['sent'], transfer['total'], cancelled)))
             data = port.read(min(max(port.in_waiting, 1), 16384))
             if data:
                 events.put(('rx', data))
     except Exception as exc:
         events.put(('error', str(exc)))
     finally:
+        if stream is not None:
+            stream.close()
         try:
             port.close()
         except Exception:
@@ -54,7 +77,15 @@ class SerialComTest(W.QWidget):
         self.outgoing = queue.Queue(maxsize=100)
         self.log = None
         self.rx_count = self.tx_count = 0
-        layout = W.QVBoxLayout(self)
+        self.file_busy = False
+        self.file_cancel = threading.Event()
+        outer = W.QHBoxLayout(self)
+        split = W.QSplitter(C.Qt.Orientation.Horizontal)
+        outer.addWidget(split)
+        left = W.QWidget()
+        layout = W.QVBoxLayout(left)
+        layout.setContentsMargins(0, 0, 0, 0)
+        split.addWidget(left)
         note = W.QLabel('Open a port to receive data. Send transmits the entered text or HEX bytes. '
                         'Use loop:// for a software loopback test.')
         note.setWordWrap(True)
@@ -141,6 +172,26 @@ class SerialComTest(W.QWidget):
         self.repeat_button = W.QPushButton('Start repeat')
         self.repeat_button.clicked.connect(self.toggle_repeat)
         send.addWidget(self.repeat_button)
+        files = W.QGroupBox('File transfer — sends original file bytes to the serial port')
+        file_layout = W.QGridLayout(files)
+        self.file_path = W.QLineEdit()
+        self.file_path.setPlaceholderText('Select a file to send')
+        file_layout.addWidget(self.file_path, 0, 0, 1, 4)
+        browse = W.QPushButton('Select file')
+        browse.clicked.connect(self.select_file)
+        preview = W.QPushButton('View file')
+        preview.clicked.connect(self.view_file)
+        self.file_send_button = W.QPushButton('Send file')
+        self.file_send_button.clicked.connect(self.send_file)
+        self.file_cancel_button = W.QPushButton('Stop file')
+        self.file_cancel_button.clicked.connect(lambda: self.file_cancel.set())
+        self.file_cancel_button.setEnabled(False)
+        for col, button in enumerate((browse, preview, self.file_send_button, self.file_cancel_button)):
+            file_layout.addWidget(button, 1, col)
+        self.file_progress = W.QProgressBar()
+        self.file_progress.setRange(0, 100)
+        file_layout.addWidget(self.file_progress, 2, 0, 1, 4)
+        layout.addWidget(files)
         self.status = W.QLabel('Disconnected')
         self.status.setWordWrap(True)
         self.counts = W.QLabel('RX: 0 bytes    TX: 0 bytes')
@@ -148,6 +199,14 @@ class SerialComTest(W.QWidget):
         layout.addWidget(self.counts)
         self.repeat = C.QTimer(self)
         self.repeat.timeout.connect(self.repeat_send)
+        self.batch = C.QTimer(self)
+        self.batch.setSingleShot(True)
+        self.batch.timeout.connect(self.batch_tick)
+        self.batch_commands = []
+        self.build_commands(split)
+        split.setStretchFactor(0, 3)
+        split.setStretchFactor(1, 2)
+        split.setSizes([650, 470])
         self.poll_timer = C.QTimer(self)
         self.poll_timer.timeout.connect(self.drain_events)
         self.poll_timer.start(40)
@@ -216,11 +275,20 @@ class SerialComTest(W.QWidget):
     def disconnected_ui(self):
         self.connected = False
         self.stop_repeat()
+        self.stop_commands()
+        self.file_busy = False
+        self.file_cancel.set()
+        self.file_send_button.setEnabled(True)
+        self.file_cancel_button.setEnabled(False)
         for box in self.fields.values(): box.setEnabled(True)
         for item in (self.refresh_button,self.dtr,self.rts): item.setEnabled(True)
         self.open_button.setText('Open port')
 
     def disconnect_port(self):
+        self.connected = False
+        self.stop_repeat()
+        self.stop_commands()
+        self.file_cancel.set()
         self.stop.set()
         if self.worker is not None: self.worker.join(timeout=1)
         while not self.events.empty(): self.drain_events()
@@ -233,15 +301,21 @@ class SerialComTest(W.QWidget):
             except queue.Full: self.status.setText('Transmit queue full; line change was not queued.')
 
     def send_once(self):
+        return self.send_command(self.message.toPlainText(), self.hex_send.isChecked(), self.ending.currentText())
+
+    def send_command(self, text, hex_mode=False, ending='CRLF'):
         if not self.connected:
             self.status.setText('Open a port first.')
+            return False
+        if self.file_busy:
+            self.status.setText('Stop or finish the file transfer before sending commands.')
             return False
         if not self.can_open():
             self.disconnect_port()
             self.status.setText('Test port closed because survey recording or monitoring started.')
             return False
         try:
-            data = encode_message(self.message.toPlainText(),self.hex_send.isChecked(),self.ending.currentText())
+            data = encode_message(text, hex_mode, ending)
             if not data: raise ValueError('Enter data to send.')
             if len(data)>65536: raise ValueError('Maximum single transmission is 65,536 bytes.')
             self.outgoing.put_nowait(('send',data))
@@ -255,6 +329,7 @@ class SerialComTest(W.QWidget):
     def toggle_repeat(self):
         if self.repeat.isActive(): self.stop_repeat()
         elif self.send_once():
+            self.stop_commands()
             self.repeat.start(self.interval.value())
             self.repeat_button.setText('Stop repeat')
 
@@ -290,6 +365,19 @@ class SerialComTest(W.QWidget):
                 self.disconnected_ui()
             elif kind=='closed' and self.connected:
                 self.disconnected_ui();self.status.setText('Connection closed')
+            elif kind=='tx_file':
+                self.tx_count += value
+            elif kind=='file_progress':
+                sent, total = value
+                self.file_progress.setValue(int(100 * sent / total) if total else 100)
+                self.status.setText(f'File sent to serial driver: {sent:,} / {total:,} bytes')
+            elif kind=='file_done':
+                sent, total, cancelled = value
+                self.file_busy = False
+                self.file_send_button.setEnabled(True)
+                self.file_cancel_button.setEnabled(False)
+                self.file_progress.setValue(int(100 * sent / total) if total else 100)
+                self.status.setText(f"File {'stopped' if cancelled else 'sent to serial driver'}: {sent:,} / {total:,} bytes")
         self.counts.setText(f'RX: {self.rx_count:,} bytes    TX: {self.tx_count:,} bytes')
         if self.connected and not self.can_open():
             self.disconnect_port()
@@ -325,3 +413,194 @@ class SerialComTest(W.QWidget):
     def closeEvent(self, event):
         self.cleanup()
         super().closeEvent(event)
+
+    def build_commands(self, splitter):
+        box = W.QGroupBox('Command list')
+        layout = W.QVBoxLayout(box)
+        self.choose_all = W.QCheckBox('Choose all commands')
+        self.choose_all.toggled.connect(self.select_all_commands)
+        layout.addWidget(self.choose_all)
+        self.commands = W.QTableWidget(29, 5)
+        self.commands.setHorizontalHeaderLabels(['Use', 'Command', 'HEX', 'Enter', 'Send'])
+        self.commands.horizontalHeader().setSectionResizeMode(1, W.QHeaderView.ResizeMode.Stretch)
+        for col in (0, 2, 3, 4):
+            self.commands.horizontalHeader().setSectionResizeMode(col, W.QHeaderView.ResizeMode.ResizeToContents)
+        self.commands.setMinimumWidth(350)
+        self.commands.setToolTip('Commands are sent only when you press a row button or Send selected. Enter appends CRLF.')
+        self.command_rows = []
+        for row in range(29):
+            use, hex_box, enter = W.QCheckBox(), W.QCheckBox(), W.QCheckBox()
+            enter.setChecked(True)
+            text = W.QLineEdit()
+            text.setPlaceholderText(f'Command {row + 1}')
+            send = W.QPushButton(str(row + 1))
+            send.clicked.connect(lambda checked=False, index=row: self.send_row(index))
+            for col, widget in enumerate((use, text, hex_box, enter, send)):
+                self.commands.setCellWidget(row, col, widget)
+            self.command_rows.append((use, text, hex_box, enter))
+        layout.addWidget(self.commands, 1)
+        presets = W.QHBoxLayout()
+        for label, callback in [('Load set', self.load_commands), ('Save set', self.save_commands), ('Clear set', self.clear_commands)]:
+            button = W.QPushButton(label)
+            button.clicked.connect(callback)
+            presets.addWidget(button)
+        layout.addLayout(presets)
+        run = W.QHBoxLayout()
+        run.addWidget(W.QLabel('Delay (ms)'))
+        self.command_delay = W.QSpinBox()
+        self.command_delay.setRange(20, 3600000)
+        self.command_delay.setValue(1000)
+        run.addWidget(self.command_delay)
+        self.run_commands = W.QPushButton('Send selected')
+        self.run_commands.clicked.connect(self.start_commands)
+        run.addWidget(self.run_commands)
+        stop = W.QPushButton('Stop list')
+        stop.clicked.connect(self.stop_commands)
+        run.addWidget(stop)
+        layout.addLayout(run)
+        hint = W.QLabel('Each numbered button sends its row. Load/save command sets as JSON; text files load one command per line. No commands run automatically.')
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        splitter.addWidget(box)
+
+    def select_all_commands(self, checked):
+        for use, text, hex_box, enter in self.command_rows:
+            use.setChecked(checked)
+
+    def send_row(self, index):
+        use, text, hex_box, enter = self.command_rows[index]
+        return self.send_command(text.text(), hex_box.isChecked(), 'CRLF' if enter.isChecked() else 'None')
+
+    def start_commands(self):
+        if self.batch.isActive() or self.batch_commands:
+            self.status.setText('Command list is already running.')
+            return
+        selected = []
+        try:
+            for use, text, hex_box, enter in self.command_rows:
+                if use.isChecked():
+                    command = (text.text(), hex_box.isChecked(), 'CRLF' if enter.isChecked() else 'None')
+                    if not command[0]: raise ValueError('A selected command is empty.')
+                    payload = encode_message(*command)
+                    if not payload or len(payload) > 65536: raise ValueError('A selected command has an invalid length.')
+                    selected.append(command)
+            if not selected: raise ValueError('Select at least one command using its Use checkbox.')
+        except Exception as exc:
+            self.status.setText(f'Cannot run command list: {exc}')
+            return
+        self.stop_repeat()
+        self.batch_commands = selected
+        self.run_commands.setEnabled(False)
+        self.batch_tick()
+
+    def batch_tick(self):
+        if not self.batch_commands:
+            self.stop_commands()
+            return
+        if not self.send_command(*self.batch_commands.pop(0)):
+            self.stop_commands()
+            return
+        if self.batch_commands: self.batch.start(self.command_delay.value())
+        else: self.stop_commands()
+
+    def stop_commands(self):
+        self.batch.stop()
+        self.batch_commands = []
+        self.run_commands.setEnabled(True)
+
+    def command_set(self):
+        return {'version': 1, 'delay_ms': self.command_delay.value(), 'commands': [
+            {'text': text.text(), 'hex': hex_box.isChecked(), 'enter': enter.isChecked(), 'selected': use.isChecked()}
+            for use, text, hex_box, enter in self.command_rows]}
+
+    def apply_command_set(self, data):
+        if not isinstance(data, dict) or data.get('version') != 1:
+            raise ValueError('Unsupported command-set format.')
+        rows = data.get('commands')
+        if not isinstance(rows, list) or len(rows) > 29:
+            raise ValueError('A command set supports up to 29 rows.')
+        delay = data.get('delay_ms', 1000)
+        if type(delay) is not int or not 20 <= delay <= 3600000: raise ValueError('Invalid delay.')
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get('text', ''), str) or len(row.get('text', '')) > 65536:
+                raise ValueError('Invalid command text.')
+            if any(type(row.get(k, False if k != 'enter' else True)) is not bool for k in ('hex', 'enter', 'selected')):
+                raise ValueError('Invalid command options.')
+        self.stop_commands()
+        self.clear_commands()
+        self.command_delay.setValue(delay)
+        for widgets, row in zip(self.command_rows, rows):
+            use, text, hex_box, enter = widgets
+            text.setText(row.get('text', ''))
+            hex_box.setChecked(row.get('hex', False))
+            enter.setChecked(row.get('enter', True))
+            use.setChecked(row.get('selected', False))
+
+    def clear_commands(self):
+        self.stop_commands()
+        self.choose_all.setChecked(False)
+        for use, text, hex_box, enter in self.command_rows:
+            use.setChecked(False);text.clear();hex_box.setChecked(False);enter.setChecked(True)
+
+    def load_commands(self):
+        name, _ = W.QFileDialog.getOpenFileName(self, 'Load command set', '', 'Command set (*.json);;Commands, one per line (*.txt)')
+        if not name: return
+        try:
+            if Path(name).stat().st_size > 2 * 1024 * 1024: raise ValueError('Command set must be smaller than 2 MB.')
+            text = Path(name).read_text(encoding='utf-8-sig')
+            data = json.loads(text) if Path(name).suffix.lower() == '.json' else {
+                'version': 1, 'commands': [{'text': line} for line in text.splitlines()]}
+            self.apply_command_set(data)
+            self.status.setText(f'Loaded command set: {Path(name).name}; nothing sent.')
+        except Exception as exc: self.status.setText(f'Load failed: {exc}')
+
+    def save_commands(self):
+        name, _ = W.QFileDialog.getSaveFileName(self, 'Save command set', '', 'Command set (*.json)')
+        if name:
+            try:
+                Path(name).write_text(json.dumps(self.command_set(), indent=2), encoding='utf-8')
+                self.status.setText(f'Saved command set: {Path(name).name}')
+            except OSError as exc: self.status.setText(f'Save failed: {exc}')
+
+    def select_file(self):
+        name, _ = W.QFileDialog.getOpenFileName(self, 'Select file to send', '', 'All files (*)')
+        if name: self.file_path.setText(name)
+
+    def view_file(self):
+        try:
+            with open(self.file_path.text(), 'rb') as stream: data = stream.read(65537)
+            dialog = W.QDialog(self)
+            dialog.setWindowTitle('File preview — first 64 KB')
+            dialog.resize(750, 450)
+            layout = W.QVBoxLayout(dialog)
+            preview = W.QPlainTextEdit()
+            preview.setReadOnly(True)
+            preview.setPlainText(data[:65536].hex(' ').upper() if self.hex_receive.isChecked() else data[:65536].decode('utf-8', errors='replace'))
+            layout.addWidget(preview)
+            dialog.exec()
+        except OSError as exc: self.status.setText(f'Cannot view file: {exc}')
+
+    def send_file(self):
+        if not self.connected or not self.can_open():
+            self.status.setText('Open a test port with survey acquisition stopped first.')
+            return False
+        if self.file_busy:
+            self.status.setText('A file transfer is already running.')
+            return False
+        try:
+            path = Path(self.file_path.text())
+            if not path.is_file(): raise ValueError('Select a readable file first.')
+            with path.open('rb'): pass
+            self.stop_repeat()
+            self.stop_commands()
+            self.file_cancel = threading.Event()
+            self.outgoing.put_nowait(('file', (str(path), self.file_cancel)))
+            self.file_busy = True
+            self.file_progress.setValue(0)
+            self.file_send_button.setEnabled(False)
+            self.file_cancel_button.setEnabled(True)
+            self.status.setText(f'Queued file: {path.name} ({path.stat().st_size:,} bytes); sent without added terminators.')
+            return True
+        except Exception as exc:
+            self.status.setText(f'Cannot send file: {exc}')
+            return False
