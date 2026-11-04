@@ -49,6 +49,8 @@ Embedded geographic reference datasets and protected map resources are excluded 
 
 Open **Settings → Hardware settings → Serial COM Test** to configure a serial port, send text or HEX bytes, view received traffic, repeat transmissions, control DTR/RTS, and save raw received bytes or the displayed traffic. The panel starts disconnected. Enter `loop://` as the port for software loopback; physical hardware is needed to verify real instrument communication. The default line ending is CRLF; choose None when sending binary HEX without an appended terminator.
 
+**Load test script** imports `.script`, `.json`, QCOM-style `.ini`, or one-command-per-line `.txt` files without transmitting anything. **Save used as script** exports only checked Use rows in their original order, retaining HEX/Enter options and delay. Different per-command INI delays and repeated INI runs are rejected rather than silently changed.
+
 The command list provides 29 editable rows with per-row HEX and Enter checkboxes and numbered send buttons. Save/load JSON command sets, load a text file with one command per line, and send selected rows with an adjustable delay. Select/View/Send/Stop file controls stream the original file bytes without added terminators; this is raw serial transfer, not a device firmware-update protocol.
 
 The tester is embedded in the Qt application. Stop recording/monitoring before opening a test connection and close it before applying hardware settings. Closing Settings shuts down its worker. Software loopback and full-app integration tests passed; no physical COM port was used.
@@ -58,7 +60,9 @@ python -m pip install -r requirements.txt
 python "04 Nov 2026.py"
 ```
 
-The public edition retains its existing reference-dataset exclusions. The website also offers the complete Desktop edition. Existing Windows executables remain the 24 October builds.
+**[Download the Windows EXE and build source](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/releases/tag/v2026.11.04-serial-scripts)**. The portable Public EXE includes its Python runtime; extract/run it locally. The matching complete Desktop EXE is offered on the website.
+
+The public edition retains its existing reference-dataset exclusions. The website also offers the complete Desktop edition. The 4 November Windows builds include the new serial script controls.
 
 ### Previous single-file download: 24 OCT 2026 (source refresh 25 October)
 
