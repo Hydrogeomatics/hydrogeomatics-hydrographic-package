@@ -45,15 +45,17 @@ Embedded geographic reference datasets and protected map resources are excluded 
 
 ### Latest single-file download: 04 NOV 2026
 
-**[Download 04NOV2026.py](https://raw.githubusercontent.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/main/04NOV2026.py)**. This is a standalone Python source file.
+**[Download 04 Nov 2026.py](https://raw.githubusercontent.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/main/04%20Nov%202026.py)**. This is a standalone Python source file.
 
 Open **Settings → Hardware settings → Serial COM Test** to configure a serial port, send text or HEX bytes, view received traffic, repeat transmissions, control DTR/RTS, and save raw received bytes or the displayed traffic. The panel starts disconnected. Enter `loop://` as the port for software loopback; physical hardware is needed to verify real instrument communication. The default line ending is CRLF; choose None when sending binary HEX without an appended terminator.
+
+The command list provides 29 editable rows with per-row HEX and Enter checkboxes and numbered send buttons. Save/load JSON command sets, load a text file with one command per line, and send selected rows with an adjustable delay. Select/View/Send/Stop file controls stream the original file bytes without added terminators; this is raw serial transfer, not a device firmware-update protocol.
 
 The tester is embedded in the Qt application. Stop recording/monitoring before opening a test connection and close it before applying hardware settings. Closing Settings shuts down its worker. Software loopback and full-app integration tests passed; no physical COM port was used.
 
 ```sh
 python -m pip install -r requirements.txt
-python 04NOV2026.py
+python "04 Nov 2026.py"
 ```
 
 The public edition retains its existing reference-dataset exclusions. The website also offers the complete Desktop edition. Existing Windows executables remain the 24 October builds.

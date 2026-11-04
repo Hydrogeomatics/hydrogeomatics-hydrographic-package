@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SINGLE_FILE = '04NOV2026.py'
-ARCHIVED_SINGLE_FILES = {'24OCT2026.py': 'c394492fac9449845183a938c2d998c0beb7e465d4405884d67d08dcedae5a68', 'Hydrogeomatics version 22 OCT 2026.py': 'ff8a4fcd71ae5c7af79133b57e02bd4722e175859f61dcf0cb668c1ff3923221'}
+SINGLE_FILE = '04 Nov 2026.py'
+ARCHIVED_SINGLE_FILES = {'04NOV2026.py': '38906758213d482085daf2a426d8170855514441405d610638a30455593360fd', '24OCT2026.py': 'c394492fac9449845183a938c2d998c0beb7e465d4405884d67d08dcedae5a68', 'Hydrogeomatics version 22 OCT 2026.py': 'ff8a4fcd71ae5c7af79133b57e02bd4722e175859f61dcf0cb668c1ff3923221'}
 SOURCE_MODULES = {
     'SERIAL_COM_TEST_SOURCE': 'modules/serial_com_test.py',
     'QT_WIDGET_SOURCE': 'modules/qt_widget_source.py',
@@ -75,10 +75,10 @@ def single_file_source(files):
     documentation = '''HYDROGEOMATICS - version 04 NOV 2026, public single-file edition.
 
 Contains the reviewed public application code; no separate modules folder is needed.
-Updated 4 November 2026: native Serial COM Test in Hardware & Survey Settings. Public reference-data exclusions are retained.
+Updated 4 November 2026: Serial COM Test with 29 command rows, command sets and raw file transfer in Hardware & Survey Settings. Public reference-data exclusions are retained.
 Python 3.10+ and the packages in requirements.txt are still required.
 Install: python -m pip install PyQt6 pyqtgraph numpy pyserial pyproj ezdxf matplotlib utide sonarlight pandas
-Run: python "04NOV2026.py"
+Run: python "04 Nov 2026.py"
 Project code: MIT License. Dependencies retain their own licenses.
 Embedded private/reference datasets are excluded. Indus reference-data and tide/astronomy features remain disabled in this public edition.
 Contribute: https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package
