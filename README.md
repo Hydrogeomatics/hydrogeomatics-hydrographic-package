@@ -2,7 +2,7 @@
 
 ### An open-source hydrographic package, built for the community
 
-[![Publication safeguards](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/actions/workflows/security.yml/badge.svg)](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/actions/workflows/security.yml)
+[![Publication safeguards](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/actions/workflows/security.yml/badge.svg)](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 HYDROGEOMATICS brings survey planning, hydrographic data handling, mapping, processing, and conversion tools into a Python desktop application. It is shared for hydrographers, surveyors, students, researchers, and developers to inspect, learn from, test, and improve together.
@@ -39,13 +39,23 @@ Embedded geographic reference datasets and protected map resources are excluded 
 
 ## Separate sonar equipment trial v4
 
-[Windows EXE, single-file Python source, setup guides and validation reports](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/releases/tag/sonar-equipment-trial-v4). Independent engineering evaluation, including the Actisense NGX/NGT binary USB navigation/depth driver. Simulated tests passed; no physical gateway or sonar has been tested. The proposed SL3-over-TCP receiver requires a cooperating test bridge. Native StructureScan Ethernet, live SL3 generation and live 3D decoding are not implemented or verified. This is separate from the hydrographic package below.
+[Windows EXE, single-file Python source, setup guides and validation reports](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/releases/tag/sonar-equipment-trial-v4). Independent engineering evaluation, including the Actisense NGX/NGT binary USB navigation/depth driver. Simulated tests passed; no physical gateway or sonar has been tested. The proposed SL3-over-TCP receiver requires a cooperating test bridge. Native StructureScan Ethernet, live SL3 generation and live 3D decoding are not implemented or verified. This is separate from the hydrographic package below.
 
 ## Get started
 
-### Latest single-file download: 04 NOV 2026
+### Latest complete Desktop release: 05 NOV 2026 — Marine Device Interface
 
-**[Download 04 Nov 2026.py](https://raw.githubusercontent.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/main/04%20Nov%202026.py)**. This is a standalone Python source file.
+**[Download the tested source package, setup guide and checksums](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/releases/tag/05-nov-2026-marine-interface).** This complete Desktop release is distributed separately from the older modular public edition below. Existing Windows executables remain earlier builds.
+
+Open **Marine Devices → Device Test / Monitor** for live survey diagnostics, including while logging. Serial/USB, TCP and UDP inputs support NMEA 0183/ASCII and the documented Actisense N2K ASCII and binary BST93/D0 receive formats. Select the required survey source addresses in **Survey connections / sources**; new NMEA 2000 profiles start in monitor-only mode.
+
+Supported N2K position, depth, heading and motion measurements feed the existing acquisition engine. Original incoming bytes are retained, and the LINE EDITOR, TARGET EDITOR, F5 marking and orange current-target selection remain available. Simulated protocol, local transport, full-app recording and target regression tests passed. Physical instruments still require bench testing.
+
+Gateways must already stream the selected format. Gateway-specific initialization/configuration and firmware updates are not included in this stage. The proprietary Actisense Toolkit application is not bundled. See the release's **Marine interface guide.md** for setup and boundaries.
+
+### Previous public single-file download: 04 NOV 2026
+
+**[Download 04 Nov 2026.py](https://raw.githubusercontent.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/main/04%20Nov%202026.py)**. This is a standalone Python source file.
 
 Open **Settings → Hardware settings → Serial COM Test** to configure a serial port, send text or HEX bytes, view received traffic, repeat transmissions, control DTR/RTS, and save raw received bytes or the displayed traffic. The panel starts disconnected. Enter `loop://` as the port for software loopback; physical hardware is needed to verify real instrument communication. The default line ending is CRLF; choose None when sending binary HEX without an appended terminator.
 
@@ -60,13 +70,13 @@ python -m pip install -r requirements.txt
 python "04 Nov 2026.py"
 ```
 
-**[Download the Windows EXE and build source](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/releases/tag/v2026.11.04-serial-scripts)**. The portable Public EXE includes its Python runtime; extract/run it locally. The matching complete Desktop EXE is offered on the website.
+**[Download the Windows EXE and build source](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/releases/tag/v2026.11.04-serial-scripts)**. The portable Public EXE includes its Python runtime; extract/run it locally. The matching complete Desktop EXE is offered on the website.
 
 The public edition retains its existing reference-dataset exclusions. The website also offers the complete Desktop edition. The 4 November Windows builds include the new serial script controls.
 
 ### Previous single-file download: 24 OCT 2026 (source refresh 25 October)
 
-**[Download 24OCT2026.py](https://raw.githubusercontent.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/main/24OCT2026.py)**. Save the link as a Python file and install the dependencies listed below.
+**[Download 24OCT2026.py](https://raw.githubusercontent.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/main/24OCT2026.py)**. Save the link as a Python file and install the dependencies listed below.
 
 The complete Desktop source was refreshed on 25 October 2026 so tide descriptions refer to existing uploaded constituents. The 5,072 stations and 130,097 constituent rows were retained. Those reference datasets remain excluded from this public edition; its metadata has been refreshed to identify the update. Windows executables remain the 24 October builds.
 
@@ -83,7 +93,7 @@ Original incoming bytes are preserved in `.incoming.jsonl`, original messages in
 
 ### Single-file download: version 22 OCT 2026
 
-**[Download Hydrogeomatics version 22 OCT 2026.py](https://raw.githubusercontent.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/main/Hydrogeomatics%20version%2022%20OCT%202026.py)** (save the linked content as a `.py` file).
+**[Download Hydrogeomatics version 22 OCT 2026.py](https://raw.githubusercontent.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/main/Hydrogeomatics%20version%2022%20OCT%202026.py)** (save the linked content as a `.py` file).
 
 This edition contains all reviewed public source modules in one readable Python file. It does **not** need the separate `modules` folder. Python and the runtime dependencies are still required:
 
@@ -96,14 +106,14 @@ The single-file edition preserves the public distribution's data exclusions: emb
 
 ### Full source package for contributors
 
-**Download the full package:** [Download ZIP](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/archive/refs/heads/main.zip), then **extract all files**. Keep `hydrographic_package.py`, `requirements.txt`, and the `modules` folder together. Downloading just the Python launcher will not work. Run from the extracted folder, not from inside the ZIP viewer.
+**Download the full package:** [Download ZIP](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/archive/refs/heads/main.zip), then **extract all files**. Keep `hydrographic_package.py`, `requirements.txt`, and the `modules` folder together. Downloading just the Python launcher will not work. Run from the extracted folder, not from inside the ZIP viewer.
 
 Use Python 3.10 or newer and Git. The desktop interface uses PyQt6. The public distribution has not yet been validated across all operating systems.
 
 Git is only needed for the clone method below; ZIP downloads do not require Git. Open a terminal in the extracted folder and follow the virtual-environment and installation steps. After setup, Windows users can double-click `start_windows.cmd`; it keeps startup errors visible.
 
 ```sh
-git clone https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package.git
+git clone https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package.git
 cd hydrogeomatics-hydrographic-package
 python -m venv .venv
 ```
@@ -149,7 +159,7 @@ The dredging tool starts a local browser interface. Keep its terminal open while
 
 ## Help shape the package
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), browse the [issues](https://github.com/hydrogeomatics-ui/hydrogeomatics-hydrographic-package/issues), or propose a focused improvement.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), browse the [issues](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/issues), or propose a focused improvement.
 
 Useful starting points include:
 
