@@ -43,7 +43,23 @@ Embedded geographic reference datasets and protected map resources are excluded 
 
 ## Get started
 
-### Latest complete Desktop release: 05 NOV 2026 — Marine Device Interface
+### Latest complete Desktop release (09 NOV 2026) — GNSS course over ground
+
+**[Download the Python source ZIP, setup guide and checksums](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/releases/tag/09-nov-2026-gnss-cog).** Extract
+**09 NOV 2026.py** from the ZIP and install the Python dependencies.
+
+In Hardware Settings, select **RMC** or **VTG** for your NMEA 0183 receiver. The
+navigation map displays **COG** when fresh heading is unavailable. The starting
+minimum speed is **1.0 m/s** and course expires after **2.5 seconds**. An invalid
+fix or a low-speed sample clears COG. A VTG sentence without a mode indicator
+requires a valid recent RMC or GGA fix on the same connection.
+
+The setup guide covers the BYNAV Gmouse M20 and SingularXYZ S20. Simulated
+live-input checks and the Qt startup self-test passed. Check the speed threshold
+on a straight run with your receiver. The Windows EXE download is the 4 November
+build.
+
+### Previous complete Desktop release (05 NOV 2026) — Marine Device Interface
 
 **[Download the tested source package, setup guide and checksums](https://github.com/Hydrogeomatics/hydrogeomatics-hydrographic-package/releases/tag/05-nov-2026-marine-interface).** This complete Desktop release is distributed separately from the older modular public edition below. Existing Windows executables remain earlier builds.
 
